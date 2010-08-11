@@ -1,5 +1,6 @@
 # ClayBlueprint
 require "rubygems"
+gem "activesupport", "2.3.8"
 require "active_support"
 
 # TODO
@@ -16,9 +17,9 @@ module ClayBlueprint
   def self.Clay(name,options = {})
     klass_name = (options[:class] || name).to_s.classify
     options.delete(:class)
-    object = Clay.defined_clays[klass_name]
-    raise InvalidClay.new("Invalid clay #{klass_name}") unless object
-    klass = Object.const_get(klass_name)
+    object = Clay.defined_clays[name]
+    raise InvalidClay.new("Invalid clay #{name}") unless object
+    klass = object.class
     new_object = klass.allocate()
     new_object.extend(ExtendClayClass)
     new_object.copy_clay_attributes(object)
@@ -38,7 +39,7 @@ module ClayBlueprint
     class << self
       def define(name,options = {},&block)
         klass_name = (options[:class] || name).to_s.classify
-        check_duplicate_definition(klass_name,options)
+        check_duplicate_definition(name,options)
         const_name = Object.const_defined?(klass_name) && Object.const_get(klass_name)
         object = nil
         if const_name
@@ -50,14 +51,14 @@ module ClayBlueprint
           object.extend(ExtendClayClass)
         end
         object.clay_creation_block(&block)
-        @@defined_clays[klass_name] = object
+        @@defined_clays[name] = object
         object
       end
 
-      def check_duplicate_definition(klass_name,options)
-        old_object = @@defined_clays[klass_name]
+      def check_duplicate_definition(name,options)
+        old_object = @@defined_clays[name]
         if (old_object && !options[:force])
-          raise DuplicateClayDefinition.new("Clay #{klass_name} has been already defined") 
+          raise DuplicateClayDefinition.new("Clay #{name} has been already defined") 
         end
       end
     end
@@ -206,6 +207,33 @@ if __FILE__ == $0
       should "work as usual" do
         emacs = ClayBlueprint::Clay(:emacs)
         assert_equal "Editor", emacs.name
+      end
+    end
+
+    context "Same class but with different name" do
+      setup do
+        ClayBlueprint::Clay.define(:lesson, :class => "Lesson") do |l|
+          l.name "foo"
+          l.content "bar"
+          l.size 10
+        end
+
+        ClayBlueprint::Clay.define(:lesson_without_content,:class => "Lesson") do |l|
+          l.name "lesson1"
+          l.size 20
+        end
+      end
+
+      should "work without creating conflicts" do
+        a = ClayBlueprint::Clay(:lesson)
+        assert_equal 'foo', a.name
+        assert_equal 'bar', a.content
+        assert_equal 10, a.size
+
+        b = ClayBlueprint::Clay(:lesson_without_content)
+        assert_equal 'lesson1', b.name
+        assert_nil b.content
+        assert_equal 20, b.size
       end
     end
   end
